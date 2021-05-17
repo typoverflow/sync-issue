@@ -52,4 +52,4 @@ if __name__ == "__main__":
     }
     url = "https://git.nju.edu.cn/api/v4/projects/2412/issues"
     new_issues = fetch_gitlab_issues(url, focused=["title", "description", "created_at", "updated_at", "labels"])
-    post_github_issues('https://api.github.com/repos/typoverflow/test_for_NJULUG_Jokes/issues', new_issues, mapping)
+    post_github_issues('https://api.github.com/repos/typoverflow/issue-sync/issues', new_issues, mapping)
