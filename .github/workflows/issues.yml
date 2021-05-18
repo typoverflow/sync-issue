@@ -30,6 +30,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |-
           python sync.py
+      - name: commit and push
+        run: |-
+          git diff
+          git config --global user.email "typoverflow@outlook.com"
+          git config --global user.name "typoverflow-bot"
+          git add -A
+          git commit -m "Bot: upload images" || exit 0
+          git push
       - name: print message
         run: |
           echo "successful."

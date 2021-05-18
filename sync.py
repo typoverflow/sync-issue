@@ -3,18 +3,19 @@ import requests
 import pathlib
 import json
 from dateutil import parser
-from requests.api import patch
+from requests.api import head, patch
 import os
 import re
 import copy
 
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
-root = pathlib.Path(__file__).parent.resolve()
+ROOT = pathlib.Path(__file__).parent.resolve()
+IMG_DIR = "./img"
 
 class Issue(object):
     img_url_pattern = {
-        "gitlab": r"!\[image\]\((/uploads/.*/image\..{3,4})\)", 
-        "github": None, 
+        "gitlab": r"!\[.*\]\((/uploads/.*\..{3,4})\)", 
+        "github": r"!\[.*\]\((.*\..{3,4})\)", 
         "gitee": None,
     }
 
@@ -38,12 +39,14 @@ class Issue(object):
             img_dir.mkdir()
         for suffix in self.resources:
             r = requests.get(self.repo_url+suffix)
-            img_path = img_dir / suffix
+            assert r.status_code == 200
+            img_path = img_dir / suffix[1:]
+            if not img_path.parent.exists():
+                img_path.parent.mkdir(parents=True)
             if img_path.exists() and img_path.is_file():
                 continue
             with open(img_path, "wb") as fp:
-                for chunk in r.iter_content(chunk_size=64):
-                    fp.write(chunk)
+                fp.write(r.content)
 
     def convert_url(self):
         """
@@ -52,11 +55,15 @@ class Issue(object):
         if self.type == "gitlab":
             targets = [self.repo_url + suffix for suffix in self.resources]
             for i in range(len(self.resources)):
-                self.body.replace(self.resources[i], targets[i])
+                new_body = self.body.replace(self.resources[i], targets[i])
+                self.body = new_body
+                self.raw_data["body"] = new_body
         elif self.type == "github":
-            targets = [self.repo_url + "/raw/master" + suffix for suffix in self.resources]
+            targets = [self.repo_url + "/raw/master/" + IMG_DIR + suffix for suffix in self.resources]
             for i in range(len(self.resources)):
-                self.body.replace(self.resources[i], targets[i])
+                new_body = self.body.replace(self.resources[i], targets[i])
+                self.body = new_body
+                self.raw_data["body"] = new_body
         elif self.type == "gitee":
             raise NotImplementedError
         else:
@@ -66,89 +73,63 @@ class Issue(object):
         new_issue = copy.deepcopy(self)
         new_issue.type = new_type
         new_issue.repo_url = new_repo_url
+        return new_issue
     
 
-
-#     def download_resources(self, img_dir: pathlib.Path):
-#         if not img_dir.exists():
-#             img_dir.mkdir()
-#         for suffix in self.resources:
-#             r = requests.get(self.repo_url+suffix)
-#             img_path = img_dir/suffix
-#             if img_path.exists():
-#                 continue
-#             with open(img_path, "wb") as fp:
-#                 for chunk  in r.iter_content(chunk_size=64):
-#                     fp.write(chunk)
-
-#     def to(self, new_type, new_repo_url):
-#         if new_type == self.type:
-#             return self
-#         # new_issue = Issue(new_type, data=None, repo_url=new_repo_url)
-#         new_data = {Issue.ops[new_type]["property_map"][key]}
-#         for (key, value) in Issue.ops[self.type]["property_map"].items():
-
-
-
-
-
-        
-
-# def fetch_issues_list(url, headers=None, type="gitlab", focused_property=None):
-#     if type not in ["gitlab", "github", "gitee"]:
-#         raise NotImplementedError
-#     r = requests.get(url, headers=headers)
-#     assert r.status_code == 200
-#     issues = json.loads(r.text)
-
-#     if len(issues) == 0:
-#         return []
-#     if focused_property is None:
-#         focused = issues[0].keys()
-
-
-
-def fetch_gitlab_issues(url, headers=None, params=None, focused=None):
-    r = requests.get(url, headers=headers, params=params)
+def fetch_issues(request_url, repo_url, type, headers=None):
+    r = requests.get(request_url, headers=headers)
     assert r.status_code == 200
     issues = json.loads(r.text)
-    if len(issues) == 0:
-        return []
-    if focused is None:
-        focused = issues[0].keys()
-
-    issues = [{key:value for (key, value) in issue.items() if key in focused} for issue in issues] 
+    issues = [Issue(type, issue_data, repo_url) for issue_data in issues]
     return issues
 
-def post_github_issues(url, new_issues, mapping):
-    headers = {'Authorization': 'token {}'.format(GH_TOKEN)}
+
+def post_issues(post_url, repo_url, type, new_issues, force=False, headers=None):
     session = requests.session()
-    r = session.get(url, headers=headers)
+    r = session.get(post_url, headers=headers)
     assert r.status_code == 200
     old_issues = json.loads(r.text)
+    old_issues = [Issue(type, issue_data, repo_url) for issue_data in old_issues]
 
     for new_issue in new_issues:
         flag = True
         for old_issue in old_issues:
-            if old_issue["title"] == new_issue["title"]:
-                if parser.parse(old_issue["updated_at"]) < parser.parse(new_issue["updated_at"]):
-                    patch_dict = {mapping[key]:value for (key, value) in new_issue.items() if key in mapping.keys()}
-                    r = session.patch(url+"/{}".format(old_issue["number"]), json.dumps(patch_dict), headers=headers)
+            if old_issue.title == new_issue.title:
+                if force or (
+                    parser.parse(old_issue.updated_at) < parser.parse(new_issue.updated_at)
+                ) :
+                    new_issue.download_resources(ROOT/IMG_DIR)
+                    new_issue = new_issue.to(type, repo_url)
+                    new_issue.convert_url()
+                    patch_dict = {key:value for (key, value) in new_issue.__dict__.items() if key in ("title", "body", "labels")}
+                    r = session.patch(post_url+"/{}".format(old_issue.raw_data["number"]), json.dumps(patch), headers=headers)
                     assert r.status_code == 200
                 flag = False
-        if flag: 
-            post_dict = {mapping[key]:value for (key, value) in new_issue.items() if key in mapping.keys()}
-            r = session.post(url, json.dumps(post_dict), headers=headers)
+                break
+            
+        if flag:
+            new_issue.download_resources(ROOT/IMG_DIR)
+            new_issue = new_issue.to(type, repo_url)
+            new_issue.convert_url()
+            post_dict = {key:value for (key, value) in new_issue.__dict__.items() if key in ("title", "body", "labels")}
+            r = session.post(post_url, json.dumps(post_dict), headers=headers)
             assert r.status_code == 201
 
 
-
 if __name__ == "__main__":
-    mapping = {
-        "title": "title", 
-        "description": "body", 
-        "labels": "labels"
-    }
-    url = "https://git.nju.edu.cn/api/v4/projects/2412/issues"
-    new_issues = fetch_gitlab_issues(url, focused=["title", "description", "created_at", "updated_at", "labels"])
-    post_github_issues('https://api.github.com/repos/typoverflow/issue-sync/issues', new_issues, mapping)
+    # headers = {'Authorization': 'token {}'.format(GH_TOKEN)}
+    headers = {'Authorization': 'token {}'.format("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")}
+    new_issues = fetch_issues(
+        "https://git.nju.edu.cn/api/v4/projects/2412/issues", 
+        "https://git.nju.edu.cn/nju-lug/lug-joke-collection", 
+        "gitlab", 
+        headers=None
+        )
+    post_issues(
+        "https://api.github.com/repos/typoverflow/test_for_NJULUG_Jokes/issues", 
+        "https://github.com/typoverflow/test_for_NJULUG_Jokes", 
+        "github", 
+        new_issues, 
+        force=False, 
+        headers=headers
+    )
