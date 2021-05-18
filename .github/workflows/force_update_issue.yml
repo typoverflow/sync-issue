@@ -1,8 +1,6 @@
-name: sync_issues
+name: force_sync_issues
 on: 
   workflow_dispatch:
-  schedule:
-    - cron: '0 */12 * * *'
 
 jobs: 
   sync-issues-from-nju-git: 

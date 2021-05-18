@@ -7,6 +7,7 @@ from requests.api import head, patch
 import os
 import re
 import copy
+import sys
 
 GH_TOKEN = os.environ.get("GH_TOKEN", "")
 ROOT = pathlib.Path(__file__).parent.resolve()
@@ -81,6 +82,7 @@ def fetch_issues(request_url, repo_url, type, headers=None):
     assert r.status_code == 200
     issues = json.loads(r.text)
     issues = [Issue(type, issue_data, repo_url) for issue_data in issues]
+    issues.sort(key=lambda x:parser.parse(x.created_at))
     return issues
 
 
@@ -129,6 +131,6 @@ if __name__ == "__main__":
         "https://github.com/typoverflow/test_for_NJULUG_Jokes", 
         "github", 
         new_issues, 
-        force=False, 
+        force=eval(sys.argv[1]), 
         headers=headers
     )
