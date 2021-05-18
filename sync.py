@@ -127,8 +127,8 @@ if __name__ == "__main__":
         headers=None
         )
     post_issues(
-        "https://api.github.com/repos/typoverflow/test_for_NJULUG_Jokes/issues", 
-        "https://github.com/typoverflow/test_for_NJULUG_Jokes", 
+        "https://api.github.com/repos/typoverflow/sync-issue/issues", 
+        "https://github.com/typoverflow/sync-issue", 
         "github", 
         new_issues, 
         force=eval(sys.argv[1]), 
