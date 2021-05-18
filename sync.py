@@ -117,8 +117,7 @@ def post_issues(post_url, repo_url, type, new_issues, force=False, headers=None)
 
 
 if __name__ == "__main__":
-    # headers = {'Authorization': 'token {}'.format(GH_TOKEN)}
-    headers = {'Authorization': 'token {}'.format("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")}
+    headers = {'Authorization': 'token {}'.format(GH_TOKEN)}
     new_issues = fetch_issues(
         "https://git.nju.edu.cn/api/v4/projects/2412/issues", 
         "https://git.nju.edu.cn/nju-lug/lug-joke-collection", 
