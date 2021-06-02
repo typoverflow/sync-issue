@@ -3,6 +3,8 @@
 
 目前仅用作同步[LUG Joke Collection](https://git.nju.edu.cn/nju-lug/lug-joke-collection)仓库（需校园网）中的issues，路过的话不妨去原仓库看看。
 
+由于同时在两个仓库同步Issue会对维护者的timeline造成较大污染，因此issue的同步效果请参考南京大学Linux Users Group的[官方Joke仓库](https://github.com/nju-lug/LUG-Joke-Collection)。
+
 ## Usage
 待填坑
 
